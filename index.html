@@ -435,21 +435,30 @@
       };
     }
 
+    function normalizeScriptUrl(url) {
+      const trimmed = (url || "").trim();
+      if (!trimmed) return "";
+      if (trimmed.endsWith("/exec") || trimmed.endsWith("/dev")) return trimmed;
+      return trimmed + "/exec";
+    }
+
     async function syncToGoogleSheet(showStatus = true) {
-      const url = el.syncUrl.value.trim();
+      const url = normalizeScriptUrl(el.syncUrl.value);
       if (!url) {
         if (showStatus) setStatus("請先填入 Google Apps Script Web App URL。", true);
         return false;
       }
 
+      el.syncUrl.value = url;
       saveSyncUrl();
       el.syncButton.disabled = true;
       if (showStatus) setStatus("同步中...");
 
       try {
+        // 使用 text/plain 避免 CORS preflight（Apps Script 常被 OPTIONS 擋住）
         const resp = await fetch(url, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
           body: JSON.stringify(buildSyncPayload()),
         });
 
@@ -467,8 +476,9 @@
     }
 
     async function loadFromGoogleSheet() {
-      const url = el.syncUrl.value.trim();
+      const url = normalizeScriptUrl(el.syncUrl.value);
       if (!url) return false;
+      el.syncUrl.value = url;
 
       const resp = await fetch(url, { method: "GET" });
       if (!resp.ok) {
@@ -544,16 +554,16 @@
           updateRecord(state.editingId, date, amount);
           resetEditingMode();
           setStatus("已更新還款紀錄，正在同步雲端...");
-          await syncToGoogleSheet(false);
-          setStatus("已更新還款紀錄。");
+          const ok = await syncToGoogleSheet(false);
+          setStatus(ok ? "已更新還款紀錄。" : "更新完成，但雲端同步失敗。", !ok);
           return;
         }
 
         addRecord(date, amount);
         el.amount.value = "";
         setStatus("已新增還款紀錄，正在同步雲端...");
-        await syncToGoogleSheet(false);
-        setStatus("已新增還款紀錄。");
+        const ok = await syncToGoogleSheet(false);
+        setStatus(ok ? "已新增還款紀錄。" : "新增完成，但雲端同步失敗。", !ok);
       });
 
       el.recordsWrap.addEventListener("click", async (e) => {
@@ -585,8 +595,8 @@
             resetEditingMode();
           }
           setStatus("已刪除紀錄，正在同步雲端...");
-          await syncToGoogleSheet(false);
-          setStatus("已刪除紀錄。");
+          const ok = await syncToGoogleSheet(false);
+          setStatus(ok ? "已刪除紀錄。" : "刪除完成，但雲端同步失敗。", !ok);
         }
       });
 
