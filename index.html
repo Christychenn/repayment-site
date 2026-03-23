@@ -1,0 +1,622 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>還款紀錄</title>
+  <style>
+    :root {
+      --bg: #f6f7fb;
+      --card: #ffffff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --primary: #2563eb;
+      --danger: #dc2626;
+      --ok: #16a34a;
+      --border: #e5e7eb;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans TC", sans-serif;
+      color: var(--text);
+      background: var(--bg);
+      padding: 20px;
+    }
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      display: grid;
+      gap: 16px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+    }
+    h1 { margin: 0 0 12px; font-size: 24px; }
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+    }
+    .summary-item {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+    }
+    .summary-item .label {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .summary-item .value {
+      font-size: 24px;
+      font-weight: 700;
+    }
+    .ok { color: var(--ok); }
+    .danger { color: var(--danger); }
+    form {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 10px;
+      align-items: end;
+    }
+    label {
+      display: block;
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    input[type="date"], input[type="number"], input[type="url"], input[type="password"] {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 14px;
+    }
+    button {
+      padding: 10px 14px;
+      border: 0;
+      border-radius: 8px;
+      background: var(--primary);
+      color: white;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button.secondary {
+      background: #374151;
+    }
+    button.danger {
+      background: var(--danger);
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .form-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .controls {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 10px;
+      align-items: end;
+    }
+    .hint {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 6px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+    }
+    th, td {
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      padding: 10px 8px;
+      font-size: 14px;
+    }
+    th { color: var(--muted); font-weight: 600; }
+    .empty {
+      color: var(--muted);
+      padding: 8px 0;
+    }
+    .row-actions button {
+      padding: 6px 10px;
+      font-size: 12px;
+    }
+    .status {
+      font-size: 13px;
+      margin-top: 8px;
+      color: var(--muted);
+      min-height: 20px;
+    }
+    @media (max-width: 700px) {
+      form, .controls { grid-template-columns: 1fr; }
+      .row-actions { text-align: right; }
+    }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <section class="card">
+      <h1>還款紀錄</h1>
+      <div class="summary">
+        <div class="summary-item">
+          <div class="label">總金額</div>
+          <div class="value" id="totalAmount"></div>
+        </div>
+        <div class="summary-item">
+          <div class="label">已還金額</div>
+          <div class="value ok" id="paidAmount"></div>
+        </div>
+        <div class="summary-item">
+          <div class="label">剩餘金額</div>
+          <div class="value danger" id="remainingAmount"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <form id="repaymentForm">
+        <input id="editingId" type="hidden" />
+        <div>
+          <label for="date">還款日期</label>
+          <input id="date" type="date" required />
+        </div>
+        <div>
+          <label for="amount">還款金額</label>
+          <input id="amount" type="number" min="1" step="1" placeholder="例如：5000" required />
+        </div>
+        <div class="form-actions">
+          <button type="submit" id="submitButton">新增紀錄</button>
+          <button type="button" class="secondary" id="cancelEditButton" style="display:none;">取消編輯</button>
+        </div>
+      </form>
+      <div style="margin-top: 10px;">
+        <label for="deletePassword">刪除密碼（刪除時必填）</label>
+        <input id="deletePassword" type="password" placeholder="預設是 1234，可自行更改" />
+        <div class="hint">密碼只存在你的本機瀏覽器。若未設定會使用預設值 1234。</div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="controls">
+        <div>
+          <label for="syncUrl">Google Apps Script Web App URL（選填）</label>
+          <input id="syncUrl" type="url" placeholder="https://script.google.com/macros/s/.../exec" />
+          <div class="hint">填入後可一鍵同步到 Google Sheet。網址會保存在本機。</div>
+        </div>
+        <button type="button" class="secondary" id="syncButton">同步全部到 Google Sheet</button>
+        <button type="button" class="secondary" id="exportButton">匯出 Excel</button>
+      </div>
+      <div class="status" id="status"></div>
+    </section>
+
+    <section class="card">
+      <h2 style="margin:0 0 8px; font-size:18px;">歷史紀錄</h2>
+      <div id="recordsWrap"></div>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script>
+    const TOTAL_AMOUNT = 114751;
+    const STORAGE_KEY = "repayment_records_v1";
+    const SYNC_URL_KEY = "repayment_sync_url_v1";
+    const DELETE_PASSWORD_KEY = "repayment_delete_password_v1";
+    const DEFAULT_DELETE_PASSWORD = "1234";
+    // 可選：若你想固定綁定一個雲端端點，可直接貼在這裡。
+    const DEFAULT_SYNC_URL = "";
+
+    const state = {
+      records: [],
+      editingId: null,
+    };
+
+    const el = {
+      totalAmount: document.getElementById("totalAmount"),
+      paidAmount: document.getElementById("paidAmount"),
+      remainingAmount: document.getElementById("remainingAmount"),
+      form: document.getElementById("repaymentForm"),
+      editingId: document.getElementById("editingId"),
+      date: document.getElementById("date"),
+      amount: document.getElementById("amount"),
+      submitButton: document.getElementById("submitButton"),
+      cancelEditButton: document.getElementById("cancelEditButton"),
+      deletePassword: document.getElementById("deletePassword"),
+      recordsWrap: document.getElementById("recordsWrap"),
+      syncUrl: document.getElementById("syncUrl"),
+      syncButton: document.getElementById("syncButton"),
+      exportButton: document.getElementById("exportButton"),
+      status: document.getElementById("status"),
+    };
+
+    function formatMoney(value) {
+      return new Intl.NumberFormat("zh-TW").format(value);
+    }
+
+    function saveRecords() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state.records));
+    }
+
+    function loadRecords() {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return [];
+      try {
+        const parsed = JSON.parse(raw);
+        return sanitizeRecords(parsed);
+      } catch {
+        return [];
+      }
+    }
+
+    function sanitizeRecords(records) {
+      if (!Array.isArray(records)) return [];
+      return records
+        .filter(r => r && r.id && r.date && Number.isFinite(Number(r.amount)))
+        .map(r => ({
+          id: String(r.id),
+          date: String(r.date),
+          amount: Number(r.amount),
+          createdAt: r.createdAt ? String(r.createdAt) : "",
+        }));
+    }
+
+    function saveSyncUrl() {
+      localStorage.setItem(SYNC_URL_KEY, el.syncUrl.value.trim());
+    }
+
+    function loadSyncUrl() {
+      const fromQuery = getSyncUrlFromQuery();
+      if (fromQuery) {
+        el.syncUrl.value = fromQuery;
+        saveSyncUrl();
+        return;
+      }
+
+      if (DEFAULT_SYNC_URL) {
+        el.syncUrl.value = DEFAULT_SYNC_URL;
+        saveSyncUrl();
+        return;
+      }
+
+      const value = localStorage.getItem(SYNC_URL_KEY);
+      if (value) {
+        el.syncUrl.value = value;
+      }
+    }
+
+    function getSyncUrlFromQuery() {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const value = params.get("sync");
+        if (!value) return "";
+        return decodeURIComponent(value).trim();
+      } catch {
+        return "";
+      }
+    }
+
+    function saveDeletePassword() {
+      localStorage.setItem(DELETE_PASSWORD_KEY, el.deletePassword.value.trim());
+    }
+
+    function loadDeletePassword() {
+      const value = localStorage.getItem(DELETE_PASSWORD_KEY);
+      if (value) {
+        el.deletePassword.value = value;
+      }
+    }
+
+    function getDeletePassword() {
+      return el.deletePassword.value.trim() || DEFAULT_DELETE_PASSWORD;
+    }
+
+    function calculatePaid() {
+      return state.records.reduce((sum, r) => sum + Number(r.amount), 0);
+    }
+
+    function renderSummary() {
+      const paid = calculatePaid();
+      const remaining = TOTAL_AMOUNT - paid;
+      el.totalAmount.textContent = formatMoney(TOTAL_AMOUNT);
+      el.paidAmount.textContent = formatMoney(paid);
+      el.remainingAmount.textContent = formatMoney(remaining);
+    }
+
+    function renderRecords() {
+      if (state.records.length === 0) {
+        el.recordsWrap.innerHTML = '<div class="empty">目前還沒有還款紀錄。</div>';
+        return;
+      }
+
+      const rows = state.records
+        .slice()
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .map((r, idx) => {
+          return `
+            <tr>
+              <td>${idx + 1}</td>
+              <td>${r.date}</td>
+              <td>${formatMoney(r.amount)}</td>
+              <td class="row-actions">
+                <button class="secondary" data-action="edit" data-id="${r.id}">編輯</button>
+                <button class="danger" data-action="delete" data-id="${r.id}">刪除</button>
+              </td>
+            </tr>
+          `;
+        })
+        .join("");
+
+      el.recordsWrap.innerHTML = `
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>日期</th>
+              <th>金額</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      `;
+    }
+
+    function renderAll() {
+      renderSummary();
+      renderRecords();
+    }
+
+    function setStatus(message, isError = false) {
+      el.status.textContent = message;
+      el.status.style.color = isError ? "var(--danger)" : "var(--muted)";
+    }
+
+    function addRecord(date, amount) {
+      state.records.push({
+        id: crypto.randomUUID(),
+        date,
+        amount: Number(amount),
+        createdAt: new Date().toISOString(),
+      });
+      saveRecords();
+      renderAll();
+    }
+
+    function updateRecord(id, date, amount) {
+      state.records = state.records.map(r => {
+        if (r.id !== id) return r;
+        return { ...r, date, amount: Number(amount) };
+      });
+      saveRecords();
+      renderAll();
+    }
+
+    function removeRecord(id) {
+      state.records = state.records.filter(r => r.id !== id);
+      saveRecords();
+      renderAll();
+    }
+
+    function setEditingMode(record) {
+      state.editingId = record.id;
+      el.editingId.value = record.id;
+      el.date.value = record.date;
+      el.amount.value = String(record.amount);
+      el.submitButton.textContent = "更新紀錄";
+      el.cancelEditButton.style.display = "";
+    }
+
+    function resetEditingMode() {
+      state.editingId = null;
+      el.editingId.value = "";
+      el.submitButton.textContent = "新增紀錄";
+      el.cancelEditButton.style.display = "none";
+      el.amount.value = "";
+    }
+
+    function buildSyncPayload() {
+      const paidAmount = calculatePaid();
+      return {
+        totalAmount: TOTAL_AMOUNT,
+        paidAmount,
+        remainingAmount: TOTAL_AMOUNT - paidAmount,
+        records: state.records.slice().sort((a, b) => a.date.localeCompare(b.date)),
+        syncedAt: new Date().toISOString(),
+      };
+    }
+
+    async function syncToGoogleSheet(showStatus = true) {
+      const url = el.syncUrl.value.trim();
+      if (!url) {
+        if (showStatus) setStatus("請先填入 Google Apps Script Web App URL。", true);
+        return false;
+      }
+
+      saveSyncUrl();
+      el.syncButton.disabled = true;
+      if (showStatus) setStatus("同步中...");
+
+      try {
+        const resp = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(buildSyncPayload()),
+        });
+
+        if (!resp.ok) {
+          throw new Error("HTTP " + resp.status);
+        }
+        if (showStatus) setStatus("同步完成。");
+        return true;
+      } catch (err) {
+        if (showStatus) setStatus("同步失敗：" + (err.message || "未知錯誤"), true);
+        return false;
+      } finally {
+        el.syncButton.disabled = false;
+      }
+    }
+
+    async function loadFromGoogleSheet() {
+      const url = el.syncUrl.value.trim();
+      if (!url) return false;
+
+      const resp = await fetch(url, { method: "GET" });
+      if (!resp.ok) {
+        throw new Error("HTTP " + resp.status);
+      }
+
+      const data = await resp.json();
+      if (!data || data.ok !== true) {
+        throw new Error(data?.message || "回傳格式不正確");
+      }
+
+      state.records = sanitizeRecords(data.records);
+      saveRecords();
+      renderAll();
+      return true;
+    }
+
+    function exportExcel() {
+      const sheetData = [
+        ["總金額", TOTAL_AMOUNT],
+        ["已還金額", calculatePaid()],
+        ["剩餘金額", TOTAL_AMOUNT - calculatePaid()],
+        [],
+        ["日期", "金額", "建立時間", "ID"],
+        ...state.records
+          .slice()
+          .sort((a, b) => a.date.localeCompare(b.date))
+          .map(r => [r.date, r.amount, r.createdAt, r.id]),
+      ];
+
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet(sheetData);
+      XLSX.utils.book_append_sheet(wb, ws, "還款紀錄");
+      XLSX.writeFile(wb, "還款紀錄.xlsx");
+      setStatus("已匯出 Excel 檔案。");
+    }
+
+    async function init() {
+      state.records = loadRecords();
+      loadSyncUrl();
+      loadDeletePassword();
+      renderAll();
+
+      // 預設日期帶今天
+      const today = new Date();
+      el.date.value = today.toISOString().split("T")[0];
+
+      if (el.syncUrl.value.trim()) {
+        setStatus("雲端資料載入中...");
+        try {
+          await loadFromGoogleSheet();
+          setStatus("已載入雲端資料。");
+        } catch (err) {
+          setStatus("雲端載入失敗，暫用本機資料：" + (err.message || "未知錯誤"), true);
+        }
+      }
+
+      el.form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const date = el.date.value;
+        const amount = Number(el.amount.value);
+
+        if (!date) {
+          setStatus("請輸入日期。", true);
+          return;
+        }
+        if (!Number.isFinite(amount) || amount <= 0) {
+          setStatus("請輸入有效金額。", true);
+          return;
+        }
+
+        if (state.editingId) {
+          updateRecord(state.editingId, date, amount);
+          resetEditingMode();
+          setStatus("已更新還款紀錄，正在同步雲端...");
+          await syncToGoogleSheet(false);
+          setStatus("已更新還款紀錄。");
+          return;
+        }
+
+        addRecord(date, amount);
+        el.amount.value = "";
+        setStatus("已新增還款紀錄，正在同步雲端...");
+        await syncToGoogleSheet(false);
+        setStatus("已新增還款紀錄。");
+      });
+
+      el.recordsWrap.addEventListener("click", async (e) => {
+        const btn = e.target.closest("button[data-id][data-action]");
+        if (!btn) return;
+        const id = btn.dataset.id;
+        const action = btn.dataset.action;
+
+        if (action === "edit") {
+          const record = state.records.find(r => r.id === id);
+          if (!record) {
+            setStatus("找不到要編輯的紀錄。", true);
+            return;
+          }
+          setEditingMode(record);
+          setStatus("編輯模式：修改後按「更新紀錄」。");
+          return;
+        }
+
+        if (action === "delete") {
+          const inputPassword = window.prompt("請輸入刪除密碼");
+          if (inputPassword === null) return;
+          if (inputPassword !== getDeletePassword()) {
+            setStatus("密碼錯誤，無法刪除。", true);
+            return;
+          }
+          removeRecord(id);
+          if (state.editingId === id) {
+            resetEditingMode();
+          }
+          setStatus("已刪除紀錄，正在同步雲端...");
+          await syncToGoogleSheet(false);
+          setStatus("已刪除紀錄。");
+        }
+      });
+
+      el.cancelEditButton.addEventListener("click", () => {
+        resetEditingMode();
+        setStatus("已取消編輯。");
+      });
+
+      el.deletePassword.addEventListener("change", () => {
+        saveDeletePassword();
+        setStatus("刪除密碼已更新。");
+      });
+
+      el.syncUrl.addEventListener("change", async () => {
+        saveSyncUrl();
+        if (!el.syncUrl.value.trim()) return;
+        setStatus("正在讀取雲端資料...");
+        try {
+          await loadFromGoogleSheet();
+          setStatus("已改用雲端資料。");
+        } catch (err) {
+          setStatus("雲端讀取失敗：" + (err.message || "未知錯誤"), true);
+        }
+      });
+
+      el.syncButton.addEventListener("click", () => syncToGoogleSheet(true));
+      el.exportButton.addEventListener("click", exportExcel);
+    }
+
+    init();
+  </script>
+</body>
+</html>
